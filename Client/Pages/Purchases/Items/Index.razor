@@ -1,0 +1,161 @@
+@inject NavigationManager Nav
+@inject IHttpService Http
+@inject IDialogService Dialog
+
+<MudDataGrid @ref="grid" T="PurchaseItemListItem" ServerData="LoadServerData" CurrentPage="gridPage" RowsPerPage="PageSize" Loading="loading" 
+        SortMode="SortMode.Single" Dense="true" Elevation="0">
+    <Columns>
+        <PropertyColumn Property="x => x!.Stuff">
+            <CellTemplate>
+                @if(context.Item?.Stuff != null)
+                {
+                    <MudLink Href="@($"/stuffs/{context.Item.Stuff.Slug}")">@context.Item.Stuff.Name</MudLink>
+                }
+            </CellTemplate>
+        </PropertyColumn>
+        <PropertyColumn Property="x => x!.Quantity" />
+        <PropertyColumn Property="x => x!.Price" Format="n2" />
+        <TemplateColumn Title="Total" Sortable="false">
+            <CellTemplate>
+                @if (context.Item != null)
+                {
+                    <text>@($"{context.Item.Quantity * context.Item.Price:n2}")</text>
+                }
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Sortable="false">
+            <CellTemplate>
+                @if (context.Item != null)
+                {
+                    <div class="d-flex flex-nowrap">
+                        <MudIconButton OnClick="_ => OnEditClick(context.Item)" Icon="@Icons.Material.Filled.Edit" aria-label="edit"></MudIconButton>
+                        <IconButtonDelete OnClick="_ => OnDeleteClick(context.Item)" />
+                    </div>
+                }
+            </CellTemplate>
+        </TemplateColumn>
+    </Columns>
+    <PagerContent>
+        @if (PageCount > 1)
+        {
+            <div class="py-2 d-flex justify-center">
+                <MudPagination Count="PageCount" Selected="pagerPage" SelectedChanged="PageChanged" Color="Color.Primary" />
+            </div>
+        }
+        <div class="d-flex justify-space-between pa-2">
+            <MudTextField T="string" Value="search" ValueChanged="OnSearch" Placeholder="Search"
+                          Style="max-width: 300px" Clearable="true" Variant="Variant.Outlined" Margin="Margin.Dense"
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium"></MudTextField>
+            <div>
+                <MudButton OnClick="OnAddClick" Variant="Variant.Filled" Color="Color.Primary">Add Item</MudButton>
+            </div>
+        </div>
+    </PagerContent>
+</MudDataGrid>
+
+@code
+{
+    [Parameter]
+    public required string PurchaseId { get; set; }
+
+    [Parameter]
+    public string? Search { get; set; }
+    string? search { get; set; }
+
+    [Parameter]
+    public int? Page { get; set; } = 1;
+    int gridPage => (Page ?? 1) - 1;
+    int pagerPage = 1;
+
+    public int PageSize => 10;
+    public int PageCount;
+
+    MudDataGrid<PurchaseItemListItem>? grid;
+    bool loading;
+
+    protected override void OnInitialized() => PageCount = gridPage + 1;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        search = Search;
+        pagerPage = Page ?? 1;
+        if (grid != null && Page == null) // BUG: ServerData doesn't auto reload
+            await grid.ReloadServerData();
+    }
+
+    async Task<GridData<PurchaseItemListItem>> LoadServerData(GridState<PurchaseItemListItem> state)
+    {
+        var sort = state.SortDefinitions.FirstOrDefault();
+        var query = new ListQuery
+            {
+                Search = Search,
+                Page = gridPage, // BUG: state returns wrong page on first load.
+                PageSize = state.PageSize,
+                SortField = sort?.SortBy,
+                SortDir = sort?.Descending == true ? DestuffDirection.Descending : DestuffDirection.Ascending
+            };
+
+        loading = true;
+        var result = await Http.GetAsync<PagedList<PurchaseItemListItem>>($"{ApiRoutes.PurchaseItems}?pid={PurchaseId}&{query}");
+        loading = false;
+
+        if (result == null)
+            throw new Exception("Result is null");
+
+        PageCount = (result.Count - 1) / PageSize + 1;
+        return new()
+            {
+                Items = result.List,
+                TotalItems = result.Count
+            };
+    }
+
+    void PageChanged(int i)
+    {
+        if (pagerPage != i)
+            Nav.NavigateTo($"/purchases/{PurchaseId}?{new ListQuery { Search = Search, Page = i }}");
+        pagerPage = i;
+    }
+
+    void OnSearch(string value)
+    {
+        search = value;
+        Nav.NavigateTo(string.IsNullOrEmpty(search) ? $"/purchases/{PurchaseId}" : $"/purchases/{PurchaseId}?s={search}");
+    }
+
+    async void OnAddClick()
+    {
+        var parameters = new DialogParameters();
+        parameters.Add(nameof(CreateModal.Model), new PurchaseItemRequest { PurchaseId = PurchaseId });
+
+        var dialog = await Dialog.ShowAsync<CreateModal>("", parameters);
+        var result = await dialog.Result;
+
+        if (!result.Canceled && grid != null)
+            await grid.ReloadServerData();
+    }
+
+    async void OnEditClick(PurchaseItemListItem item)
+    {
+        var parameters = new DialogParameters();
+        parameters.Add(nameof(UpdateModal.Model), item);
+
+        var dialog = await Dialog.ShowAsync<UpdateModal>("", parameters);
+        var result = await dialog.Result;
+
+        if (!result.Canceled && grid != null)
+            await grid.ReloadServerData();
+    }
+
+    async void OnDeleteClick(PurchaseItemListItem item)
+    {
+        var parameters = new DialogParameters();
+        parameters.Add(nameof(DeleteModal.Model), item);
+
+        var dialog = await Dialog.ShowAsync<DeleteModal>("", parameters);
+        var result = await dialog.Result;
+
+        if (!result.Canceled && grid != null)
+            await grid.ReloadServerData();
+    }
+}

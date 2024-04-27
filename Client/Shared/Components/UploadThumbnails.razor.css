@@ -1,0 +1,11 @@
+::deep .mud-badge-cursor-pointer .mud-badge {
+    cursor: pointer;
+}
+
+::deep .mud-badge-root .mud-badge {
+    display: none;
+}
+
+::deep .mud-badge-root:hover .mud-badge {
+    display: block;
+}

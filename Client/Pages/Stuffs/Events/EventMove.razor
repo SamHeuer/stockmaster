@@ -1,0 +1,34 @@
+﻿@if (FromLocation != null && ToLocation != null) {
+    <text>
+        <strong>Moved</strong> from
+        <LocationLink Model="FromLocation" />
+        to
+        <LocationLink Model="ToLocation" />.
+    </text>
+}
+else if (ToLocation != null) {
+    <text>
+        Set location to
+        <LocationLink Model="ToLocation" />.
+    </text>
+}
+else {
+    <text>
+        @Model.Summary
+    </text>
+}
+
+
+
+@code {
+    [Parameter]
+    public required EventListItem Model { get; set; }
+
+    public LocationListItem? FromLocation => Model.Data?.FromLocation;
+    public LocationListItem? ToLocation => Model.Data?.ToLocation;
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+    }
+}

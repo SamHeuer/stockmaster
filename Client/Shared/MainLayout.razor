@@ -1,0 +1,105 @@
+﻿@inherits LayoutComponentBase
+
+@inject IStorageService Storage
+@inject IHttpService Http
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<MudThemeProvider @bind-IsDarkMode="@darkMode" Theme="theme" />
+<MudDialogProvider 
+    Position="DialogPosition.Center"
+    MaxWidth="MaxWidth.Small"
+    FullWidth="true"
+    CloseButton="true"
+    CloseOnEscapeKey="true"
+/>
+<MudSnackbarProvider />
+
+<MudLayout>
+    <MudAppBar Elevation="0">
+        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@((e) => DrawerToggle())" />
+        <MudSpacer />
+
+        <MudToggleIconButton Toggled="@darkMode" ToggledChanged="DarkThemeChanged"
+                             Icon="@Icons.Material.Outlined.DarkMode" Color="@Color.Inherit" Title="Switch to Dark Theme"
+                             ToggledIcon="@Icons.Material.Outlined.LightMode" ToggledColor="@Color.Warning" ToggledTitle="Switch to Light Theme" />
+
+        @if (loading) {
+            <div class="px-3 d-flex align-center">
+                <MudProgressCircular Color="Color.Inherit" Size="Size.Small" StrokeWidth="5" Indeterminate="true" />
+            </div>
+        }
+        else if (!online) {
+            <div class="px-3 d-flex align-center">
+                <MudIcon Title="Offline" Color="Color.Error" Icon="@Icons.Material.Outlined.SignalWifiStatusbarConnectedNoInternet4" />
+            </div>
+        }
+        else {
+            <UserMenu />
+        }
+
+    </MudAppBar>
+    <MudDrawer @bind-Open="drawerOpen" Elevation="1">
+        <MudDrawerHeader>
+            <MudText Typo="Typo.h5">
+                <a href="/">Destuff</a>
+            </MudText>
+        </MudDrawerHeader>
+        <NavMenu />
+    </MudDrawer>
+    <MudMainContent>
+        @if (loading)
+        {
+            <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+        }
+        <MudContainer MaxWidth="MaxWidth.False" Class="my-2">
+            @Body
+        </MudContainer>
+    </MudMainContent>
+</MudLayout>
+
+@code {
+    MudTheme theme = new MudTheme() {
+            Typography = new Typography() {
+                H1 = new() { FontWeight = 100, FontSize = "40px" },
+                H2 = new() { FontWeight = 100, FontSize = "32px" },
+                H3 = new() { FontWeight = 100 },
+                H6 = new() { FontWeight = 100 },
+            }
+        };
+
+    bool drawerOpen = true;
+    bool darkMode = false;
+    bool loading = false;
+    bool online = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+
+        darkMode = await Storage.GetDarkTheme();
+
+        Http.LoadingStateChanged += async (_, _loading) => {
+            loading = _loading;
+            await InvokeAsync(StateHasChanged);
+        };
+
+        Http.OnlineStateChanged += (s, isOnline) => online = isOnline;
+        Http.OnError += (s, args) => {
+            if (args.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                Nav.NavigateTo("/login");
+            else
+                Snackbar.Add(args.Message, Severity.Error);
+        };
+    }
+
+    void DrawerToggle()
+    {
+        drawerOpen = !drawerOpen;
+    }
+
+    async Task DarkThemeChanged()
+    {
+        darkMode = !darkMode;
+        await Storage.SetDarkTheme(darkMode);
+    }
+}

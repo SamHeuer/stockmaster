@@ -1,0 +1,120 @@
+@page "/locations"
+@attribute [Authorize]
+
+@inject IHttpService Http
+@inject IDialogService Dialog
+
+<PageTitle>Locations | StockMaster</PageTitle>
+
+
+<div class="d-md-flex">
+    <div class="text-right text-nowrap order-1">
+        <MudButton OnClick="_ => OnAddClick()" Variant="Variant.Outlined" Color="Color.Primary">Add</MudButton>
+        <MudButton OnClick="MapPaths" Variant="Variant.Outlined" Color="Color.Secondary">Refresh</MudButton>
+    </div>
+    <div class="text-truncate me-auto order-0">
+        <MudText Typo="Typo.h1" Class="text-truncate my-5 my-md-3">Locations</MudText>
+    </div>
+</div>
+
+<div>
+    <MudTreeView T="LocationTreeItem" Items="items?.ToHashSet()" Hover="true">
+        <ItemTemplate Context="item">
+            <MudTreeViewItem Value="@item" Text="@item.Name" Items="@item.Children?.ToHashSet()" Expanded="true">
+                <BodyContent>
+                    <div class="d-flex justify-space-between align-center w-100">
+                        <div>
+                            <a href="@($"/locations/{item.Slug}")" class="d-inline-block w-100 pa-2 pe-sm-5">@item.Name</a>
+                        </div>
+                        <div class="btn-locations">
+                            <MudIconButton OnClick="_ => OnUpClick(item)" Icon="@Icons.Material.Filled.ArrowUpward" Color="Color.Default" Size="Size.Small" Class="mx-2" />
+                            <MudIconButton OnClick="_ => OnDownClick(item)" Icon="@Icons.Material.Filled.ArrowDownward" Color="Color.Default" Size="Size.Small" Class="mx-2" />
+                            <MudIconButton OnClick="_ => OnAddClick(item)" Icon="@Icons.Material.Filled.Add" Color="Color.Primary" Size="Size.Small" Class="mx-2" />
+                            <MudIconButton OnClick="_ => OnEditClick(item)" Icon="@Icons.Material.Filled.Edit" Color="Color.Secondary" Size="Size.Small" Class="mx-2" />
+                            <MudIconButton OnClick="_ => OnDeleteClick(item)" Disabled="@item.Children.OrEmpty().Any()"
+                                           Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" Class="mx-2" />
+                        </div>
+                    </div>
+                </BodyContent>
+            </MudTreeViewItem>
+        </ItemTemplate>
+    </MudTreeView>
+</div>
+
+@code
+{
+    List<LocationTreeItem>? items { get; set; }
+
+    protected override Task OnInitializedAsync() => LoadData();
+
+    async Task LoadData() => items = await Http.GetAsync<List<LocationTreeItem>>(ApiRoutes.Locations);
+
+    async Task MapPaths()
+    {
+        var request = new HttpRequestMessage(HttpMethod.Put, ApiRoutes.LocationMap);
+        await Http.SendAsync(request);
+
+        await LoadData();
+    }
+
+    async void OnUpClick(LocationTreeItem item)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Put, $"{ApiRoutes.LocationOrderUp}/{item.Id}");
+        await Http.SendAsync(request);
+        await LoadData();
+        StateHasChanged();
+    }
+
+    async void OnDownClick(LocationTreeItem item)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Put, $"{ApiRoutes.LocationOrderDown}/{item.Id}");
+        await Http.SendAsync(request);
+        await LoadData();
+        StateHasChanged();
+    }
+
+    async void OnAddClick(LocationTreeItem? item = null)
+    {
+        var parameters = new DialogParameters();
+        parameters.Add(nameof(LocationCreateModal.Parent), item);
+
+        var dialog = await Dialog.ShowAsync<LocationCreateModal>("", parameters);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            await LoadData();
+            StateHasChanged();
+        }
+    }
+
+    async void OnEditClick(LocationTreeItem item)
+    {
+        var parameters = new DialogParameters();
+        parameters.Add(nameof(UpdateModal.Model), item);
+
+        var dialog = await Dialog.ShowAsync<UpdateModal>("", parameters);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        { 
+            await LoadData();
+            StateHasChanged();
+        }
+    }
+
+    async void OnDeleteClick(LocationTreeItem item)
+    {
+        var parameters = new DialogParameters();
+        parameters.Add(nameof(DeleteModal.Model), item);
+
+        var dialog = await Dialog.ShowAsync<DeleteModal>("", parameters);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            items = await Http.GetAsync<List<LocationTreeItem>>(ApiRoutes.Locations);
+            StateHasChanged();
+        }
+    }
+}

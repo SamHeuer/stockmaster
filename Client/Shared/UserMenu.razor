@@ -1,0 +1,17 @@
+@inject AuthenticationService Auth
+@inject NavigationManager Nav
+
+<MudMenu Icon="@Icons.Material.Outlined.Person" Color="Color.Inherit" AnchorOrigin="Origin.BottomCenter" TransformOrigin="Origin.TopCenter">
+    <MudMenuItem Href="/settings">Settings</MudMenuItem>
+    <MudDivider Class="my-2" />
+    <MudMenuItem OnClick="OnClick">Logout</MudMenuItem>
+</MudMenu>
+
+@code {
+
+    async Task OnClick()
+    {
+        await Auth.LogoutAsync();
+        Nav.NavigateTo("/login");
+    }
+}

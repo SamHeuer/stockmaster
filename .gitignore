@@ -1,0 +1,7 @@
+*.user
+.vs/
+.vscode/
+bin/
+obj/
+Client/wwwroot/lib/
+notes.txt

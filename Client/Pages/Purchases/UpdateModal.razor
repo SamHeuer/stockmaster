@@ -1,0 +1,83 @@
+@inject IHttpService Http
+
+@if (request != null)
+{
+    <EditForm OnValidSubmit="OnSubmit" Model="request" autocomplete="off">
+        <MudDialog>
+            <TitleContent>
+                <MudText Typo="Typo.h6" Class="text-truncate pe-5">
+                    Edit Purchase
+                    @if (Model.Supplier != null)
+                    {
+                        <text> from </text>
+                        <strong>@Model.Supplier.ShortName</strong>
+                    }
+                    else if (Model.Received.HasValue || Model.Receipt.HasValue)
+                    {
+                        <text> on </text>
+                        <strong>@((Model.Received ?? Model.Receipt)?.ToShortDateString())</strong>
+                    }
+                </MudText>
+            </TitleContent>
+            <DialogContent>
+                <DataAnnotationsValidator />
+
+                <SupplierSelect @bind-Value="request.SupplierId" Loading="loading" />
+
+                <MudDatePicker @bind-Date="request.Receipt" For="@(() => request.Receipt)" Disabled="loading"
+                               Label="Receipt Date" Variant="Variant.Outlined" />
+                <MudDatePicker @bind-Date="request.Received" For="@(() => request.Received)" Disabled="loading"
+                               Label="Received Date" Variant="Variant.Outlined" />
+                <MudTextField @bind-Value="request.Notes" For="@(() => request.Notes)" Disabled="loading"
+                              Label="Notes" Variant="Variant.Outlined" Lines="3" />
+                <MudText Color="@Color.Error">@error</MudText>
+            </DialogContent>
+            <DialogActions>
+                <LoadingButton Loading="loading" />
+                <MudButton OnClick="Close" Disabled="loading" Color="Color.Default">
+                    Cancel
+                </MudButton>
+            </DialogActions>
+        </MudDialog>
+    </EditForm>
+}
+
+@code {
+    [CascadingParameter]
+    MudDialogInstance? dialog { get; set; }
+
+    [Parameter]
+    public required PurchaseModel Model { get; set; }
+    PurchaseRequest? request { get; set; }
+
+    string error { get; set; } = "";
+    bool loading { get; set; } = false;
+
+    protected override void OnParametersSet() => request = Model.ToRequest();
+
+    async Task OnSubmit()
+    {
+        if (request == null)
+            throw new NullReferenceException();
+
+        loading = true;
+
+        try
+        {
+            var result = await Http.PutAsync<PurchaseModel>($"{ApiRoutes.Purchases}/{Model.Id}", request);
+            dialog?.Close(result);
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+
+        loading = false;
+    }
+
+    void Close()
+    {
+        request = null;
+        dialog?.Cancel();
+    }
+}

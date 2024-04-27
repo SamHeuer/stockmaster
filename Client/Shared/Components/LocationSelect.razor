@@ -1,0 +1,98 @@
+@inject IHttpService Http
+@inject IDialogService Dialog
+
+<MudAutocomplete @ref="field" @bind-Text="text" T="ILocationDataModel" 
+                 Value="Model" ValueChanged="ModelChanged" MaxItems="12"
+                 SearchFunc="@Search" ToStringFunc="x => x.Name" Disabled="Loading"
+                 Label="@Label" Variant="Variant.Outlined" DebounceInterval="300"
+                 Clearable="true" ResetValueOnEmptyText="true" ShowProgressIndicator="true">
+    <ItemTemplate Context="item">
+        @if (item.Id == "add")
+        {
+            <em class="text-muted">Add Location</em>
+            <strong>@item.Name</strong>
+        }
+        else
+        {
+            @if (item.Data != null)
+            {
+                @foreach (var path in item.Data.Path.OrEmpty())
+                {
+                    <em>@path.Name</em>
+                    <text> &rsaquo; </text>
+                }
+            }
+            <span>@item.Name</span>
+        }
+    </ItemTemplate>
+</MudAutocomplete>
+
+@code
+{
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+    [Parameter] public string Label { get; set; } = "Location";
+    [Parameter] public bool Loading { get; set; }
+
+    ILocationDataModel? Model { get; set; }
+    IEnumerable<ILocationDataModel> list { get; set; } = Enumerable.Empty<ILocationDataModel>();
+    string? text { get; set; }
+
+    MudAutocomplete<ILocationDataModel>? field;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Value != null)
+            Model = await Http.GetAsync<LocationModel>($"{ApiRoutes.Locations}/{Value}");
+        text = Model?.Name;
+    }
+
+    private async Task<IEnumerable<ILocationDataModel>?> Search(string value)
+    {
+        var search = Model == null || Model.Name != value ? value : "";
+        var query = new ListQuery { Search = search, PageSize = 10, SortField = nameof(LocationModel.Id) };
+        var result = await Http.GetAsync<PagedList<LocationLookupItem>>($"{ApiRoutes.LocationLookup}?{query}");
+
+        list = result?.List.ToList() ?? Enumerable.Empty<LocationLookupItem>();
+        if (Model != null && string.IsNullOrEmpty(search))
+            list = new List<ILocationDataModel> { Model }.UnionBy(list, x => x.Id);
+
+        return list.Append(new LocationLookupItem { Id = "add", Name = search, Slug = "" });
+    }
+
+    async Task ModelChanged(ILocationDataModel? value)
+    {
+        if (value?.Id == "add" && field != null)
+        {
+            var name = text;
+            await field.ToggleMenu(); // close dropdown
+            var model = await CreateNew(name);
+
+            await field.Clear();
+            await field.ToggleMenu(); // force search
+
+            text = model?.Name;
+            await ModelChanged(model);
+        }
+        else
+        {
+            Model = value;
+            if (ValueChanged.HasDelegate)
+                await ValueChanged.InvokeAsync(value?.Id);
+        }
+    }
+
+    async Task<ILocationDataModel?> CreateNew(string? name)
+    {
+        var parameters = new DialogParameters();
+        parameters.Add(nameof(LocationCreateModal.Model), new LocationRequest { Name = name });
+
+        var dialog = await Dialog.ShowAsync<LocationCreateModal>("", parameters);
+        var result = await dialog.Result;
+
+        if (result.Canceled)
+            return null;
+
+        return result.Data as ILocationDataModel;
+    }
+}

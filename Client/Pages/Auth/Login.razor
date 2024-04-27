@@ -1,0 +1,46 @@
+@page "/login"
+@layout BaseLayout
+
+@inject AuthenticationService Auth
+@inject NavigationManager Nav
+
+<div class="d-flex text-center h-100">
+    <EditForm class="bg-white rounded-3 m-auto pa-4" OnValidSubmit="OnSubmit" Model="login">
+        <DataAnnotationsValidator />
+
+        <MudText Typo="Typo.h1">Please sign in</MudText>
+
+        <MudTextField @bind-Value="login.UserName" For="@(() => login.UserName)" Disabled="loading" AutoFocus="true"
+                      Label="Username" Variant="Variant.Outlined" Clearable="false" />
+        <MudTextField @bind-Value="login.Password" For="@(() => login.Password)" Disabled="loading" InputType="InputType.Password"
+                      Label="Password" Variant="Variant.Outlined" />
+        <MudCheckBox @bind-Checked="login.Remember" For="@(() => login.Remember)" Disabled="loading" Label="Remember me" Class="mx-auto"></MudCheckBox>
+        <LoadingButton Loading="loading" Label="Sign in" Variant="Variant.Filled" FullWidth="true" />
+
+        <label class="text-danger">@error</label>
+    </EditForm>
+</div>
+
+@code {
+    LoginRequest login { get; set; } = new LoginRequest();
+    string error { get; set; } = "";
+    bool loading { get; set; } = false;
+
+    async Task OnSubmit()
+    {
+        error = "";
+        loading = true;
+
+        try
+        {
+            await Auth.LoginAsync(login);
+            Nav.NavigateTo("/");
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+
+        loading = false;
+    }
+}

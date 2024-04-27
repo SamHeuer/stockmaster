@@ -1,0 +1,60 @@
+@using Destuff.Client.Pages.Uploads
+
+@inject IDialogService Dialog
+
+@if (Items != null)
+{
+    <div>
+        <MudGrid Spacing="1">
+            @foreach(var item in Items)
+            {
+                <MudItem xs="6" sm="4" md="2">
+                    <MudBadge OnClick="_ => OnDeleteClick(item)" Icon="@Icons.Material.Filled.Close" Color="Color.Error"
+                              Overlap="true" Bordered="true" Class="mud-badge-cursor-pointer">
+                        <div @onclick:preventDefault="true">
+                            <MudLink OnClick="_ => OnClick(item)" Href="@item.Url" Target="_blank">
+                                <MudImage Src="@item.Url" Alt="@item.FileName" Fluid="true" Elevation="1" Class="rounded-lg" />
+                            </MudLink>
+                        </div>
+                    </MudBadge>
+                </MudItem>
+            }
+        </MudGrid>
+    </div>
+}
+
+@code
+{
+    [Parameter]
+    public required ICollection<UploadModel> Items { get; set; }
+
+    async void OnClick(UploadModel item)
+    {
+        var parameters = new DialogParameters();
+        parameters.Add(nameof(UploadCarousel.Items), Items);
+        parameters.Add(nameof(UploadCarousel.Selected), item);
+
+        var options = new DialogOptions() { MaxWidth = MaxWidth.Medium, FullWidth = true };
+
+        var dialog = await Dialog.ShowAsync<UploadCarousel>("", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+            StateHasChanged();
+    }
+
+    async void OnDeleteClick(UploadModel item)
+    {
+        var parameters = new DialogParameters();
+        parameters.Add(nameof(DeleteModal.Model), item);
+
+        var dialog = await Dialog.ShowAsync<DeleteModal>("", parameters);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        { 
+            Items.Remove(item);
+            StateHasChanged();
+        }
+    }
+}

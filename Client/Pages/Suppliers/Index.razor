@@ -1,0 +1,172 @@
+@page "/suppliers"
+@attribute [Authorize]
+
+@inject NavigationManager Nav
+@inject IHttpService Http
+@inject IDialogService Dialog
+
+<PageTitle>Suppliers | StockMaster</PageTitle>
+
+<MudText Typo="Typo.h1" Class="my-5">Suppliers</MudText>
+
+<MudDataGrid @ref="grid" T="SupplierListItem" ServerData="LoadServerData" CurrentPage="gridPage" RowsPerPage="PageSize" Loading="loading" SortMode="SortMode.Single">
+    <ToolBarContent>
+        <MudTextField T="string" Value="search" ValueChanged="OnSearch" Placeholder="Search"
+                      Style="max-width: 300px" Clearable="true" Variant="Variant.Outlined" Margin="Margin.Dense"
+                      Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium"></MudTextField>
+        <MudSpacer />
+        <MudButton OnClick="OnAddClick" Variant="Variant.Outlined" Color="Color.Primary" Class="mr-2">Add</MudButton>
+    </ToolBarContent>
+    <Columns>
+        <PropertyColumn Property="x => x!.ShortName">
+            <CellTemplate>
+                <MudLink Href="@($"/suppliers/{context.Item?.Slug}")">@context.Item?.ShortName</MudLink>
+            </CellTemplate>
+        </PropertyColumn>
+        <PropertyColumn Property="x => x!.Name">
+            <CellTemplate>
+                @if (context.Item != null)
+                {
+                    <text>@context.Item.Name</text>
+                }
+            </CellTemplate>
+        </PropertyColumn>
+        <PropertyColumn Property="x => x!.PurchaseCount" Title="Purchases" Class="text-center">
+            <CellTemplate>
+                @if (context.Item != null) {
+                    <MudLink Href="@($"/suppliers/{context.Item.Slug}/purchases")">
+                        @context.Item.PurchaseCount
+                    </MudLink>
+                }
+            </CellTemplate>
+        </PropertyColumn>
+        <TemplateColumn Title="Contact" Sortable="false">
+            <CellTemplate>
+                @if (context.Item != null)
+                {
+                    @if (!string.IsNullOrEmpty(context.Item.Phone))
+                    {
+                        <MudLink Href="@($"tel:{context.Item.Phone}")">
+                            @context.Item.Phone
+                        </MudLink>
+                    }
+                    @if (!string.IsNullOrEmpty(context.Item.Phone) && !string.IsNullOrEmpty(context.Item.Url))
+                    {
+                        <text>, </text>
+                    }
+                    @if (!string.IsNullOrEmpty(context.Item.Url))
+                    {
+                        <MudLink Href="@context.Item.Url" Target="_blank">
+                            @(new Uri(context.Item.Url).Host.Replace("www.", ""))
+                        </MudLink>
+                    }
+                }
+            </CellTemplate>
+        </TemplateColumn>
+        <TemplateColumn Sortable="false">
+            <CellTemplate>
+                @if (context.Item != null)
+                {
+                    <IconButtonDelete OnClick="_ => OnDeleteClick(context.Item)" />
+                }
+            </CellTemplate>
+        </TemplateColumn>
+    </Columns>
+    <PagerContent>
+        <div class="py-5 d-flex justify-center">
+            @if (PageCount > 1)
+            {
+                <MudPagination Count="PageCount" Selected="pagerPage" SelectedChanged="PageChanged" Color="Color.Primary" />
+            }
+        </div>
+    </PagerContent>
+</MudDataGrid>
+
+@code
+{
+    [Parameter, SupplyParameterFromQuery(Name = "s")]
+    public string? Search { get; set; }
+    string? search { get; set; }
+
+    [Parameter, SupplyParameterFromQuery(Name = "p")]
+    public int? Page { get; set; } = 1;
+    int gridPage => (Page ?? 1) - 1;
+    int pagerPage = 1;
+
+    int PageSize => 10;
+    int PageCount;
+
+    MudDataGrid<SupplierListItem>? grid;
+    bool loading;
+
+    protected override void OnInitialized() => PageCount = gridPage + 1;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        search = Search;
+        pagerPage = Page ?? 1;
+        if (grid != null && Page == null) // BUG: ServerData doesn't auto reload
+            await grid.ReloadServerData();
+    }
+
+    async Task<GridData<SupplierListItem>> LoadServerData(GridState<SupplierListItem> state)
+    {
+        var sort = state.SortDefinitions.FirstOrDefault();
+        var query = new ListQuery
+            {
+                Search = Search,
+                Page = gridPage, // BUG: state page always returns 0 on first load.
+                PageSize = state.PageSize,
+                SortField = sort?.SortBy,
+                SortDir = sort?.Descending == true ? DestuffDirection.Descending : DestuffDirection.Ascending
+            };
+
+        loading = true;
+        var result = await Http.GetAsync<PagedList<SupplierListItem>>($"{ApiRoutes.Suppliers}?{query}");
+        loading = false;
+
+        if (result == null)
+            throw new Exception("Result is null");
+
+        PageCount = (result.Count - 1) / PageSize + 1;
+        return new()
+            {
+                Items = result.List,
+                TotalItems = result.Count
+            };
+    }
+
+    void PageChanged(int i)
+    {
+        if (pagerPage != i)
+            Nav.NavigateTo($"/suppliers?{new ListQuery { Search = Search, Page = i }}");
+        pagerPage = i;
+    }
+
+    void OnSearch(string value)
+    {
+        search = value;
+        Nav.NavigateTo(string.IsNullOrEmpty(search) ? $"/suppliers" : $"/suppliers?s={search}");
+    }
+
+    async void OnAddClick()
+    {
+        var dialog = await Dialog.ShowAsync<SupplierCreateModal>();
+        var result = await dialog.Result;
+
+        if (!result.Canceled && grid != null)
+            await grid.ReloadServerData();
+    }
+
+    async void OnDeleteClick(SupplierListItem item)
+    {
+        var parameters = new DialogParameters();
+        parameters.Add(nameof(DeleteModal.Model), item);
+
+        var dialog = await Dialog.ShowAsync<DeleteModal>("", parameters);
+        var result = await dialog.Result;
+
+        if (!result.Canceled && grid != null)
+            await grid.ReloadServerData();
+    }
+}

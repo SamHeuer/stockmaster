@@ -1,0 +1,74 @@
+@inject IHttpService Http
+
+@if (request != null)
+{
+    <EditForm OnValidSubmit="OnSubmit" Model="request" autocomplete="off">
+        <MudDialog>
+            <TitleContent>
+                <MudText Typo="Typo.h6" Class="text-truncate pe-5">Edit Item @Model.Stuff.Name</MudText>
+            </TitleContent>
+            <DialogContent>
+                <DataAnnotationsValidator />
+
+                <StuffSelect @bind-Value="request.StuffId" Loading="loading" />
+                
+                <MudNumericField @bind-Value="request.Quantity" For="@(() => request.Quantity)" Disabled="loading"
+                                 Label="Quantity" Variant="Variant.Outlined" />
+
+                <MudNumericField @bind-Value="request.Price" For="@(() => request.Price)" Disabled="loading"
+                                 Label="Price" Variant="Variant.Outlined" Format="N2" />
+
+                <MudTextField @bind-Value="request.Notes" For="@(() => request.Notes)" Disabled="loading"
+                              Label="Notes" Variant="Variant.Outlined" Lines="3" />
+
+                <MudText Color="@Color.Error">@error</MudText>
+            </DialogContent>
+            <DialogActions>
+                <LoadingButton Loading="loading" />
+                <MudButton OnClick="Close" Disabled="loading" Color="Color.Default">
+                    Cancel
+                </MudButton>
+            </DialogActions>
+        </MudDialog>
+    </EditForm>
+}
+
+@code {
+    [CascadingParameter]
+    MudDialogInstance? dialog { get; set; }
+
+    [Parameter]
+    public required IPurchaseItemModel Model { get; set; }
+    public PurchaseItemRequest? request { get; set; }
+
+    string error { get; set; } = "";
+    bool loading { get; set; } = false;
+
+    protected override void OnParametersSet() => request = Model.ToRequest();
+
+    async Task OnSubmit()
+    {
+        if (request == null)
+            throw new NullReferenceException();
+
+        loading = true;
+
+        try
+        {
+            var result = await Http.PutAsync<PurchaseItemModel>($"{ApiRoutes.PurchaseItems}/{Model.Id}", request);
+            dialog?.Close(result);
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+
+        loading = false;
+    }
+
+    void Close()
+    {
+        request = null;
+        dialog?.Cancel();
+    }
+}

@@ -1,0 +1,152 @@
+@page "/purchases/{Id}"
+@attribute [Authorize]
+
+@inject NavigationManager Nav
+@inject IHttpService Http
+@inject IDialogService Dialog
+
+<PageTitle>@(Title == null ? "Purchases" : $"{Title} | Purchases") | StockMaster</PageTitle>
+
+@if (Model != null)
+{
+    <div class="d-md-flex">
+        <div class="text-right text-nowrap order-1 ms-5">
+            <MudButton Href="/purchases" StartIcon="@Icons.Material.Rounded.ChevronLeft" Variant="Variant.Outlined">
+                Purchases
+            </MudButton>
+            <FileUpload PurchaseId="@Model.Id" OnUploaded="OnUploaded" ImageOnly="true"
+                        Label="Upload" Variant="Variant.Outlined" Color="Color.Tertiary" />
+            <MudButton OnClick="OnUpdateClick" Variant="Variant.Outlined"
+                       Color="Color.Primary">Edit</MudButton>
+            <MudButton OnClick="OnDeleteClick" Variant="Variant.Outlined"
+                       Color="Color.Error">Delete</MudButton>
+        </div>
+        <div class="text-truncate me-auto order-0">
+            <MudText Typo="Typo.h1" Class="text-truncate my-5 my-md-3">
+                Purchase
+                @if (Model.Supplier != null)
+                {
+                    <text> from </text>
+                    <strong>@Model.Supplier.ShortName</strong>
+                }
+                else if (Model.Received.HasValue || Model.Receipt.HasValue)
+                {
+                    <text> on </text>
+                    <strong>@((Model.Received ?? Model.Receipt)?.ToShortDateString())</strong>
+                }
+            </MudText>
+            <div>
+                <UploadThumbnails Items="Uploads" />
+            </div>
+        </div>
+    </div>
+
+    <div class="mw-100" style="width: 600px; max-width: 100%;">
+
+        @if (Model.Supplier != null)
+        {
+            <dl>
+                <dt>Supplier</dt>
+                <dd>
+                    <MudLink Href="@($"/suppliers/{Model.Supplier.Slug}")">
+                        @Model.Supplier.Name
+                    </MudLink>
+                </dd>
+            </dl>
+        }
+
+        @if (Model.Receipt.HasValue)
+        {
+            <dl>
+                <dt>Receipt Date</dt>
+                <dd>@Model.Receipt.Value.ToLongDateString()</dd>
+            </dl>
+        }
+
+        @if (Model.Received.HasValue)
+        {
+            <dl>
+                <dt>Received Date</dt>
+                <dd>@Model.Received.Value.ToLongDateString()</dd>
+            </dl>
+        }
+
+        <dl>
+            <dt>Total</dt>
+            <dd>@Model.Price.ToString("N2")</dd>
+        </dl>
+
+        <div>@Model.Notes</div>
+    </div>
+}
+
+<div class="mt-5">
+    <Destuff.Client.Pages.Purchases.Items.Index PurchaseId="@Id" Search="@Search" Page="@Page" />
+</div>
+
+
+@code {
+    [Parameter, SupplyParameterFromQuery(Name = "s")]
+    public string? Search { get; set; }
+
+    [Parameter, SupplyParameterFromQuery(Name = "p")]
+    public int? Page { get; set; }
+
+    [Parameter]
+    public string? Id { get; set; }
+
+    PurchaseModel? Model { get; set; }
+    ICollection<UploadModel> Uploads => Model?.Uploads ?? new List<UploadModel>();
+
+    string Title => Model == null ? "Purchase" :
+        Model.Received != null ? $"Purchase: {Model.Received:d}" :
+        Model.Receipt != null ? $"Purchase: {Model.Receipt:d}" :
+        Model.Supplier != null ? $"Purchase: {Model.Supplier.Name}" :
+        $"Purchase: {Model.Id}";
+
+    protected override Task OnParametersSetAsync() => LoadData();
+
+    async Task LoadData()
+    {
+        try
+        {
+            Model = await Http.GetAsync<PurchaseModel>($"{ApiRoutes.Purchases}/{Id}");
+        }
+        catch (HttpRequestException ex)
+        {
+            if (ex.StatusCode == HttpStatusCode.NotFound)
+                Nav.NavigateTo($"/purchases");
+            else
+                throw;
+        }
+    }
+
+    async void OnUpdateClick()
+    {
+        var parameters = new DialogParameters();
+        parameters.Add(nameof(UpdateModal.Model), Model);
+
+        var dialog = await Dialog.ShowAsync<UpdateModal>("", parameters);
+        var result = await dialog.Result;
+        await LoadData();
+        StateHasChanged();
+    }
+
+    async void OnDeleteClick()
+    {
+        var parameters = new DialogParameters();
+        parameters.Add(nameof(DeleteModal.Model), Model);
+
+        var dialog = await Dialog.ShowAsync<DeleteModal>("", parameters);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+            Nav.NavigateTo($"/purchases");
+    }
+
+    async Task OnUploaded(UploadModel upload)
+    {
+        Uploads.Add(upload);
+        await LoadData();
+    }
+}

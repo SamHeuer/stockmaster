@@ -1,0 +1,83 @@
+@inject IHttpService Http
+@inject IDialogService Dialog
+
+<MudAutocomplete @ref="field" @bind-Text="text" T="IStuffModel"
+                 Value="Model" ValueChanged="ModelChanged"
+                 SearchFunc="@Search" ToStringFunc="x => x.Name" Disabled="Loading"
+                 Label="Stuff" Variant="Variant.Outlined" DebounceInterval="300"
+                 Clearable="true" ResetValueOnEmptyText="true" ShowProgressIndicator="true">
+</MudAutocomplete>
+
+@code
+{
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+    [Parameter] public bool Loading { get; set; }
+    [Parameter] public bool HideLocation { get; set; }
+
+    IStuffModel? Model { get; set; }
+    IEnumerable<IStuffModel> list { get; set; } = Enumerable.Empty<IStuffModel>();
+    string? text { get; set; }
+
+    MudAutocomplete<IStuffModel>? field;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Value != null)
+            Model = await Http.GetAsync<StuffModel>($"{ApiRoutes.Stuffs}/{Value}");
+        text = Model?.Name;
+    }
+
+    async Task<IEnumerable<IStuffModel>> Search(string value)
+    {
+        var search = Model == null || Model.Name != value && !string.IsNullOrEmpty(value) ? value : null;
+        var query = new ListQuery { Search = search, PageSize = 9 };
+        var result = await Http.GetAsync<PagedList<StuffListItem>>($"{ApiRoutes.Stuffs}?{query}");
+
+        list = result?.List.ToList() ?? Enumerable.Empty<StuffListItem>();
+        if (Model != null && search == null)
+            list = new List<IStuffModel> { Model }.UnionBy(list, x => x.Id);
+
+        if (search != null)
+            return list.Append(new StuffListItem { Id = "add", Slug = "add", Name = $"-- Create new Stuff '{search}' --" });
+
+        return list.Append(new StuffListItem { Id = "add", Slug = "add", Name = "-- Create new Stuff --" });
+    }
+
+    private async Task ModelChanged(IStuffModel? value)
+    {
+        if (value?.Id == "add" && field != null)
+        {
+            var name = text;
+            await field.ToggleMenu(); // close dropdown
+            var model = await CreateNew(name);
+
+            await field.Clear();
+            await field.ToggleMenu(); // force search
+
+            text = model?.Name;
+            await ModelChanged(model);
+        }
+        else
+        {
+            Model = value;
+            if (ValueChanged.HasDelegate)
+                await ValueChanged.InvokeAsync(value?.Id);
+        }
+    }
+
+    async Task<IStuffModel?> CreateNew(string? name)
+    {
+        var parameters = new DialogParameters();
+        parameters.Add(nameof(StuffCreateModal.Model), new StuffRequest { Name = name });
+        parameters.Add(nameof(StuffCreateModal.HideLocation), HideLocation);
+
+        var dialog = await Dialog.ShowAsync<StuffCreateModal>("", parameters);
+        var result = await dialog.Result;
+
+        if (result.Canceled)
+            return null;
+
+        return result.Data as IStuffModel;
+    }
+}

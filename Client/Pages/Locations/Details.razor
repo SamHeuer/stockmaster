@@ -1,0 +1,128 @@
+@page "/locations/{Slug}"
+@attribute [Authorize]
+
+@inject NavigationManager Nav
+@inject IHttpService Http
+@inject IDialogService Dialog
+
+<PageTitle>@(Model == null ? "" : $"{Model.Name} |") Locations | StockMaster</PageTitle>
+
+@if (Model != null)
+{
+    <div class="d-md-flex">
+        <div class="text-right text-nowrap order-1 ms-5">
+            <FileUpload LocationId="@Model.Id" OnUploaded="OnUploaded" ImageOnly="true"
+                        Label="Upload" Variant="Variant.Outlined" Color="Color.Tertiary" />
+            <MudButton OnClick="OnUpdateClick" Variant="Variant.Outlined"
+                       Color="Color.Primary">Edit</MudButton>
+            <MudButton OnClick="OnDeleteClick" Variant="Variant.Outlined"
+                       Color="Color.Error">Delete</MudButton>
+        </div>
+        <div class="my-5 my-md-2 me-auto order-0">
+            <div>
+                <MudLink Href="@("/locations")" UserAttributes="@(new() { { "title", "Locations" } })">
+                    Locations
+                </MudLink>
+                @if (Model.Data?.Path != null) {
+                    @foreach (var item in Model.Data.Path) {
+                        <span class="mud-text-disabled mx-2"> / </span>
+                        <LocationLink Model="item" />
+                    }
+                }
+            </div>
+            <MudText Typo="Typo.h1" Class="text-truncate mb-4">@Model.Name</MudText>
+            <div>
+                <UploadThumbnails Items="Uploads" />
+            </div>
+        </div>
+    </div>
+
+    
+    <div>@Model.Notes</div>
+
+    <MudTreeView T="LocationTreeItem" Items="TreeItems?.ToHashSet()" Hover="true">
+        <ItemTemplate Context="item">
+            <MudTreeViewItem Value="@item" Text="@item.Name" Items="@item.Children?.ToHashSet()" Expanded="true">
+                <BodyContent>
+                    <a href="@($"/locations/{item.Slug}")" class="d-inline-block w-100 py-2">@item.Name</a>
+                </BodyContent>
+            </MudTreeViewItem>
+        </ItemTemplate>
+    </MudTreeView>
+
+    <MudPaper Class="my-5">
+        <Stuffs Model="Model" Page="Page" />
+    </MudPaper>
+}
+
+@code {
+    [Parameter]
+    public string? Slug { get; set; }
+
+    [Parameter, SupplyParameterFromQuery(Name = "p")]
+    public int? Page { get; set; }
+
+    LocationModel? Model { get; set; }
+    ICollection<UploadModel> Uploads => Model?.Uploads ?? new List<UploadModel>();
+
+    List<LocationTreeItem>? TreeItems { get; set; }
+
+    protected override Task OnParametersSetAsync() => LoadData();
+
+    async Task LoadData()
+    {
+        try
+        {
+            Model = await Http.GetAsync<LocationModel>($"{ApiRoutes.LocationBySlug}/{Slug}");
+        }
+        catch (HttpRequestException ex)
+        {
+            if (ex.StatusCode == HttpStatusCode.NotFound)
+                Nav.NavigateTo($"/locations");
+            else
+                throw;
+        }
+
+        var item = await Http.GetAsync<LocationTreeItem>($"{ApiRoutes.LocationTree}/{Model?.Id}");
+        TreeItems = item?.Children?.Any() ?? false ? new() { item } : null;
+    }
+
+    async void OnUpdateClick()
+    {
+        var parameters = new DialogParameters();
+        parameters.Add(nameof(UpdateModal.Model), Model);
+
+        var dialog = await Dialog.ShowAsync<UpdateModal>("", parameters);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            var data = result.Data as LocationModel;
+            if (data == null || data.Slug == Slug)
+            {
+                await LoadData();
+                StateHasChanged();
+            }
+            else
+                Nav.NavigateTo($"locations/{data.Slug}");
+        }
+    }
+
+    async void OnDeleteClick()
+    {
+        var parameters = new DialogParameters();
+        parameters.Add(nameof(DeleteModal.Model), Model);
+
+        var dialog = await Dialog.ShowAsync<DeleteModal>("", parameters);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+            Nav.NavigateTo($"/locations");
+    }
+
+    async Task OnUploaded(UploadModel upload)
+    {
+        Uploads.Add(upload);
+        await LoadData();
+    }
+}

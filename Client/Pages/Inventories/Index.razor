@@ -1,0 +1,98 @@
+﻿@page "/inventory/{Slug?}"
+@attribute [Authorize]
+
+@inject NavigationManager Nav
+@inject IHttpService Http
+@inject IDialogService Dialog
+
+<PageTitle>Inventory | StockMaster</PageTitle>
+
+<div class="d-md-flex my-5 my-md-3">
+    @if (Model != null) {
+        <div class="text-right text-nowrap order-1 ms-5">
+            <MudButton OnClick="OnSubmitClick" Variant="Variant.Outlined" Color="Color.Primary">
+                Submit
+            </MudButton>
+
+            @if (Slug == null)
+            {
+                <MudButton OnClick="OnSkipClick" Variant="Variant.Outlined" EndIcon="@Icons.Material.Outlined.SkipNext" Class="ms-1">
+                    Skip
+                </MudButton>
+            }
+            else
+            {
+                <MudButton Href="/inventory" Variant="Variant.Outlined" EndIcon="@Icons.Material.Outlined.SkipNext" Class="ms-1">
+                    Skip
+                </MudButton>
+            }
+        </div>
+    }
+
+    <div class="text-truncate me-auto order-0">
+        <MudText Typo="Typo.h1" Class="text-truncate">Inventory</MudText>
+    </div>
+</div>
+
+@if (Model != null) {
+    <MudPaper Class="my-5 pa-3 pa-md-5">
+        <MudText Typo="Typo.h2" Class="mb-3">Stuff</MudText>
+        <Stuff Model="Model" />
+        <MudToolBar DisableGutters="true" Dense="true">
+            <MudSpacer />
+            <MudButton OnClick="OnStuffUpdateClick" Variant="Variant.Filled"
+                       Color="Color.Primary">Edit Stuff</MudButton>
+        </MudToolBar>
+    </MudPaper>
+
+    <MudPaper Class="my-5 pa-3 pa-md-5">
+        <MudText Typo="Typo.h2" Class="mb-3">Locations</MudText>
+        <StuffLocations Model="Model" />
+    </MudPaper>
+}
+
+@code {
+    [Parameter] public string? Slug { get; set; }
+
+    StuffModel? Model { get; set; }
+
+    protected override Task OnParametersSetAsync() => GetStuff();
+
+    async void OnSubmitClick()
+    {
+        var parameters = new DialogParameters();
+        parameters.Add(nameof(CreateModal.Model), Model);
+
+        var dialog = await Dialog.ShowAsync<CreateModal>("", parameters);
+        var result = await dialog.Result;
+        if (!result.Canceled)
+            await GetStuff();
+    }
+
+    async void OnSkipClick() => await GetStuff();
+
+    async void OnStuffUpdateClick()
+    {
+        var parameters = new DialogParameters();
+        parameters.Add(nameof(StuffUpdateModal.Model), Model);
+
+        var dialog = await Dialog.ShowAsync<StuffUpdateModal>("", parameters);
+        var result = await dialog.Result;
+
+        if (!result.Canceled && result.Data is StuffModel data) {
+            await GetStuff(data.Slug);
+            StateHasChanged();
+        }
+    }
+
+    async Task GetStuff(string? slug = null)
+    {
+        slug ??= Slug;
+
+        Model = slug == null ?
+            await Http.GetAsync<StuffModel>(ApiRoutes.StuffForInventory) :
+                await Http.GetAsync<StuffModel>($"{ApiRoutes.StuffBySlug}/{slug}");
+
+        StateHasChanged();
+    }
+}

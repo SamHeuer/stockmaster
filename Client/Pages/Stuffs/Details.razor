@@ -1,0 +1,230 @@
+@page "/stuffs/{Slug}/{Tab?}"
+@using Destuff.Client.Pages.Stuffs.Events
+@using Destuff.Client.Pages.Stuffs.Parts
+@attribute [Authorize]
+
+@inject NavigationManager Nav
+@inject IHttpService Http
+@inject IDialogService Dialog
+
+<PageTitle>@(Model == null ? "" : $"{Model.Name} |") Stuffs | StockMaster</PageTitle>
+
+@if (Model != null)
+{
+    <div class="d-md-flex">
+        <div class="text-right text-nowrap order-1 ms-sm-5">
+            <MudButton Href="/stuffs" StartIcon="@Icons.Material.Rounded.ChevronLeft" Variant="Variant.Outlined">
+                Stuffs
+            </MudButton>
+            <MudButton Href="@($"/inventory/{Slug}")" Variant="Variant.Outlined">
+                Inventory
+            </MudButton>
+            @if (Tab == StuffTabs.Details)
+            {
+                <FileUpload StuffId="@Model.Id" OnUploaded="OnUploaded" ImageOnly="true"
+                    Label="Upload" Variant="Variant.Outlined" Color="Color.Tertiary" Class="ms-1" />
+                <ButtonEdit OnClick="OnUpdateClick" />
+                <ButtonDelete OnClick="OnDeleteClick" />
+            }
+        </div>
+        <div class="text-truncate me-auto order-0">
+            <MudText Typo="Typo.h1" Class="text-truncate my-5 my-md-3">@Model.Name</MudText>
+        </div>
+    </div>
+
+    <MudTabs ActivePanelIndex="activePanelIndex" ActivePanelIndexChanged="OnActivePanelIndexChanged"
+             Elevation="0" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-3 pa-md-6">
+        <MudTabPanel Text="Details" >
+            <div class="mw-100">
+                <div class="mb-4">
+                    <UploadThumbnails Items="uploads" />
+                </div>
+
+                <dl>
+                    <dt>Name</dt>
+                    <dd>@Model.Name</dd>
+                </dl>
+
+                @if (!string.IsNullOrEmpty(Model.Url))
+                {
+                    <dl>
+                        <dt>URL</dt>
+                        <dd class="text-truncate">
+                            <div @onclick:preventDefault="true">
+                                <MudLink OnClick="OnLinkClick" Href="@Model.Url" Target="_blank">
+                                    @Model.Url
+                                </MudLink>
+                            </div>
+                        </dd>
+                    </dl>
+                }
+
+                @if (Model.IsSingleLocation && Model.FirstLocation != null)
+                {
+                    <dl>
+                        <dt>Location</dt>
+                        <dd>
+                            <LocationLink Model="Model.FirstLocation" />
+                        </dd>
+                    </dl>
+                }
+                else if (Model.StuffLocations != null && Model.StuffLocations.Any())
+                {
+                    <dl>
+                        <dt>Count</dt>
+                        <dd>
+                            <MudLink Href="@($"/stuffs/{Slug}/locations")">
+                                @Model.StuffLocations.Sum(x => x.Count)
+                            </MudLink>
+                        </dd>
+                    </dl>
+                    <dl>
+                        <dt>Location</dt>
+                        <dd>
+                            @foreach (var (item, i) in Model.StuffLocations.ToIndex())
+                            {
+                                @if (i > 0) { <text>, </text> }
+                                <LocationLink Model="item.Location" />
+
+                                @if (item.Count > 1)
+                                {
+                                    <span title="@($"{item.Count} units")">@($" ({item.Count})")</span>
+                                }
+                            }
+                        </dd>
+                    </dl>
+                }
+
+                <div>@Model.Notes</div>
+            </div>
+        </MudTabPanel>
+        <MudTabPanel Text="Parts">
+            <Parts Model="Model" Page="Page" />
+        </MudTabPanel>
+        <MudTabPanel Text="Locations">
+            <StuffLocations Model="Model" PagerClass="pa-3" />
+        </MudTabPanel>
+        <MudTabPanel Text="Purchases">
+            <Purchases Model="Model" Page="Page" />
+        </MudTabPanel>
+        <MudTabPanel Text="Events">
+            <Events Model="Model" Page="Page" />
+        </MudTabPanel>
+    </MudTabs>
+}
+
+@code
+{
+    [Parameter] public string? Slug { get; set; }
+    [Parameter] public string? Tab { get; set; }
+    int activePanelIndex;
+
+    [Parameter, SupplyParameterFromQuery(Name = "p")]
+    public int? Page { get; set; }
+
+    StuffModel? Model { get; set; }
+    List<UploadModel> uploads = new List<UploadModel>();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        activePanelIndex = Tab switch {
+            StuffTabs.Parts => 1,
+            StuffTabs.Locations => 2,
+            StuffTabs.Purchases => 3,
+            StuffTabs.Events => 4,
+            _ => 0
+        };
+        
+        if (Model == null || Model.Slug != Slug)
+            await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        try
+        {
+            uploads.Clear();
+            Model = await Http.GetAsync<StuffModel>($"{ApiRoutes.StuffBySlug}/{Slug}");
+            if (Model != null)
+                uploads.AddRange(Model.Uploads.OrEmpty());
+        }
+        catch (HttpRequestException ex)
+        {
+            if (ex.StatusCode == HttpStatusCode.NotFound)
+                Nav.NavigateTo($"/stuffs");
+            else
+                throw;
+        }
+    }
+
+    void OnActivePanelIndexChanged(int index)
+    {
+        activePanelIndex = index;
+        switch (index) {
+            case 1:
+                Nav.NavigateTo($"stuffs/{Slug}/{StuffTabs.Parts}");
+                break;
+            case 2:
+                Nav.NavigateTo($"stuffs/{Slug}/{StuffTabs.Locations}");
+                break;
+            case 3:
+                Nav.NavigateTo($"stuffs/{Slug}/{StuffTabs.Purchases}");
+                break;
+            case 4:
+                Nav.NavigateTo($"stuffs/{Slug}/{StuffTabs.Events}");
+                break;
+            default:
+                Nav.NavigateTo($"stuffs/{Slug}");
+                break;
+        }
+    }
+
+    async void OnUpdateClick()
+    {
+        var parameters = new DialogParameters();
+        parameters.Add(nameof(StuffUpdateModal.Model), Model);
+
+        var dialog = await Dialog.ShowAsync<StuffUpdateModal>("", parameters);
+        var result = await dialog.Result;
+
+        if (!result.Canceled && result.Data != null)
+        {
+            var data = result.Data as StuffModel;
+            if (data == null || data.Slug == Slug)
+            {
+                await LoadData();
+                StateHasChanged();
+            }
+            else {
+                await LoadData();
+                Nav.NavigateTo($"stuffs/{data.Slug}");
+            }
+        }
+    }
+
+    async void OnDeleteClick()
+    {
+        var parameters = new DialogParameters();
+        parameters.Add(nameof(DeleteModal.Model), Model);
+
+        var dialogRef = await Dialog.ShowAsync<DeleteModal>("", parameters);
+        var result = await dialogRef.Result;
+
+        if (!result.Canceled)
+            Nav.NavigateTo($"/stuffs");
+    }
+
+    async void OnLinkClick()
+    {
+        var parameters = new DialogParameters();
+        parameters.Add(nameof(LinkMetaModal.Stuff), Model);
+
+        await Dialog.ShowAsync<LinkMetaModal>("", parameters);
+    }
+
+    async Task OnUploaded(UploadModel upload)
+    {
+        uploads.Add(upload);
+        await LoadData();
+    }
+}

@@ -1,0 +1,76 @@
+@inject IHttpService http
+
+@if (request != null)
+{
+    <EditForm OnValidSubmit="OnSubmit" Model="request" autocomplete="off">
+        <MudDialog>
+            <TitleContent>
+                <MudText Typo="Typo.h6" Class="text-truncate pe-5">Edit <strong>@Model.Name</strong></MudText>
+            </TitleContent>
+            <DialogContent>
+                <DataAnnotationsValidator />
+
+                <MudTextField @bind-Value="request.Name" For="@(() => request.Name)" Disabled="loading"
+                              Label="Name" Variant="Variant.Outlined" />
+
+                <MudTextField @bind-Value="request.Url" For="@(() => request.Url)" Disabled="loading"
+                              Label="External URL" Variant="Variant.Outlined" InputType="InputType.Url" />
+
+                @if (Model.IsSingleLocation)
+                {
+                    <LocationSelect @bind-Value="request.LocationId" Loading="loading" />
+                }
+                <MudTextField @bind-Value="request.Notes" For="@(() => request.Notes)" Disabled="loading"
+                          Label="Notes" Variant="Variant.Outlined" Lines="3" />
+
+                <MudText Color="@Color.Error">@error</MudText>
+            </DialogContent>
+            <DialogActions>
+                <LoadingButton Loading="loading" />
+                <MudButton OnClick="Close" Disabled="loading" Color="Color.Default">
+                    Cancel
+                </MudButton>
+            </DialogActions>
+        </MudDialog>
+    </EditForm>
+}
+
+@code {
+    [CascadingParameter] 
+    MudDialogInstance? dialog { get; set; }
+
+    [Parameter]
+    public required StuffModel Model { get; set; }
+    StuffRequest? request { get; set; }
+
+    string error { get; set; } = "";
+    bool loading { get; set; } = false;
+
+    protected override void OnParametersSet() => request = Model.ToRequest();
+
+    async Task OnSubmit()
+    {
+        if (request == null)
+            throw new NullReferenceException();
+
+        loading = true;
+
+        try
+        {
+            var result = await http.PutAsync<StuffModel>($"{ApiRoutes.Stuffs}/{Model.Id}", request);
+            dialog?.Close(result);
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+
+        loading = false;
+    }
+
+    public void Close()
+    {
+        request = null;
+        dialog?.Cancel();
+    }
+}

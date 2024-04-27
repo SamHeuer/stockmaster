@@ -1,0 +1,79 @@
+﻿@inject NavigationManager Nav
+@inject IHttpService Http
+
+<MudDataGrid @ref="grid" T="StuffBasicModel" ServerData="LoadServerData" CurrentPage="gridPage" RowsPerPage="PageSize" Loading="loading"
+             SortMode="SortMode.Single" Elevation="0">
+    <Columns>
+        <PropertyColumn Property="x => x.Name">
+            <CellTemplate>
+                @if (context.Item != null)
+                {
+                    <MudLink Href="@($"/stuffs/{context.Item.Slug}")">
+                        @context.Item.Name
+                    </MudLink>
+                }
+            </CellTemplate>
+        </PropertyColumn>
+    </Columns>
+    <PagerContent>
+        @if (PageCount > 1)
+        {
+            <div class="py-5 d-flex justify-center">
+                <MudPagination Count="PageCount" Selected="pagerPage" SelectedChanged="PageChanged" Color="Color.Primary" />
+            </div>
+        }
+    </PagerContent>
+</MudDataGrid>
+
+@code {
+    [Parameter] 
+    public required ISupplierModel Model { get; set; }
+
+    [Parameter]
+    public int? Page { get; set; }
+    int gridPage => (Page ?? 1) - 1;
+    int pagerPage = 1;
+
+    public int PageSize => 10;
+    public int PageCount;
+
+    MudDataGrid<StuffBasicModel>? grid;
+    bool loading;
+
+    protected override void OnInitialized() => PageCount = gridPage + 1;
+
+    protected override void OnParametersSet() => pagerPage = Page ?? 1;
+
+    async Task<GridData<StuffBasicModel>> LoadServerData(GridState<StuffBasicModel> state)
+    {
+        var sort = state.SortDefinitions.FirstOrDefault();
+        var query = new ListQuery
+            {
+                Page = gridPage, // BUG: state returns wrong page on first load.
+                PageSize = state.PageSize,
+                SortField = sort?.SortBy,
+                SortDir = sort?.Descending == true ? DestuffDirection.Descending : DestuffDirection.Ascending
+            };
+
+        loading = true;
+        var result = await Http.GetAsync<PagedList<StuffBasicModel>>($"{ApiRoutes.StuffsBySupplier}/{Model.Id}?{query}");
+        loading = false;
+
+        if (result == null)
+            throw new Exception("Result is null");
+
+        PageCount = (result.Count - 1) / PageSize + 1;
+        return new() {
+            Items = result.List,
+            TotalItems = result.Count
+        };
+    }
+
+    void PageChanged(int i)
+    {
+        if (pagerPage != i)
+            Nav.NavigateTo($"/suppliers/{Model.Slug}/stuffs?{new ListQuery { Page = i }}");
+        pagerPage = i;
+    }
+
+}

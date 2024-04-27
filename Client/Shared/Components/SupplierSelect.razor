@@ -1,0 +1,81 @@
+@inject IHttpService Http
+@inject IDialogService Dialog
+
+<MudAutocomplete @ref="field" @bind-Text="text" T="ISupplierModel"
+                 Value="Model" ValueChanged="ModelChanged"
+                 SearchFunc="@Search" ToStringFunc="x => x.Name" Disabled="Loading"
+                 Label="Supplier" Variant="Variant.Outlined" DebounceInterval="300"
+                 Clearable="true" ResetValueOnEmptyText="true" ShowProgressIndicator="true">
+</MudAutocomplete>
+
+@code
+{
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+    [Parameter] public bool Loading { get; set; }
+
+    ISupplierModel? Model { get; set; }
+    IEnumerable<ISupplierModel> list = Enumerable.Empty<ISupplierModel>();
+    string? text { get; set; }
+
+    MudAutocomplete<ISupplierModel>? field;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Value != null)
+            Model = await Http.GetAsync<SupplierModel>($"{ApiRoutes.Suppliers}/{Value}");
+        text = Model?.Name;
+    }
+
+    async Task<IEnumerable<ISupplierModel>> Search(string value)
+    {
+        var search = Model == null || Model.Name != value ? value : null;
+        var query = new ListQuery { Search = search, PageSize = 9 };
+        var result = await Http.GetAsync<PagedList<SupplierListItem>>($"{ApiRoutes.Suppliers}?{query}");
+
+        list = result?.List.ToList() ?? Enumerable.Empty<SupplierListItem>();
+        if (Model != null && search == null)
+            list = new List<ISupplierModel> { Model }.UnionBy(list, x => x.Id);
+
+        if (search != null)
+            return list.Append(new SupplierListItem { Id = "add", Slug = "add", Name = $"-- Create new Supplier '{search}' --" });
+
+        return list.Append(new SupplierListItem { Id = "add", Slug = "add", Name = "-- Create new Supplier --" });
+    }
+
+    private async Task ModelChanged(ISupplierModel? value)
+    {
+        if (value?.Id == "add" && field != null)
+        {
+            var name = text;
+            await field.ToggleMenu(); // close dropdown
+            var model = await CreateNew(name);
+
+            await field.Clear();
+            await field.ToggleMenu(); // force search
+
+            text = model?.Name;
+            await ModelChanged(model);
+        }
+        else
+        {
+            Model = value;
+            if (ValueChanged.HasDelegate)
+                await ValueChanged.InvokeAsync(value?.Id);
+        }
+    }
+
+    async Task<ISupplierModel?> CreateNew(string? name)
+    {
+        var parameters = new DialogParameters();
+        parameters.Add(nameof(SupplierCreateModal.Model), new SupplierRequest { ShortName = name, Name = name });
+
+        var dialog = await Dialog.ShowAsync<SupplierCreateModal>("", parameters);
+        var result = await dialog.Result;
+
+        if (result.Canceled)
+            return null;
+        
+        return result.Data as ISupplierModel;
+    }
+}

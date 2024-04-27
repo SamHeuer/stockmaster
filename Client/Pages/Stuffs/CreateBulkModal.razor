@@ -1,0 +1,85 @@
+@inject IHttpService http
+@inject ISnackbar snackbar
+
+@if (model != null)
+{
+    <EditForm OnValidSubmit="OnSubmit" Model="model" autocomplete="off">
+        <MudDialog>
+            <TitleContent>
+                <MudText Typo="Typo.h6">Add Stuff by Bulk</MudText>
+            </TitleContent>
+            <DialogContent>
+                <DataAnnotationsValidator />
+                <p>Add one stuff per line.</p>
+
+                <MudTextField @bind-Value="model.BatchNames" For="@(() => model.BatchNames)" Disabled="loading"
+                          Label="Names" Variant="Variant.Outlined" Lines="3" />
+
+                <LocationSelect @bind-Value="model.LocationId" Loading="loading" />
+            </DialogContent>
+            <DialogActions>
+                <LoadingButton Loading="loading" />
+                <MudButton OnClick="Close" Disabled="loading" Color="Color.Default">
+                    Cancel
+                </MudButton>
+            </DialogActions>
+        </MudDialog>
+    </EditForm>
+}
+
+@code {
+    [CascadingParameter]
+    MudDialogInstance? dialog { get; set; }
+
+    StuffBulkCreateModel? model { get; set; }
+    bool loading { get; set; } = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+        model = new StuffBulkCreateModel();
+    }
+
+    async Task OnSubmit()
+    {
+        if (model == null)
+            throw new NullReferenceException();
+
+        loading = true;
+
+        var names = (model.BatchNames ?? "").Split("\n", StringSplitOptions.RemoveEmptyEntries).ToList();
+        foreach (var name in names)
+        {
+            var model = new StuffRequest
+            {
+                Name = name,
+                LocationId = this.model.LocationId
+            };
+
+            try
+            {
+                var result = await http.PostAsync<StuffModel>(ApiRoutes.Stuffs, model);
+                snackbar.Add($"{model.Name} has been added.");
+            }
+            catch (Exception ex)
+            {
+                snackbar.Add($"{ex.Message}", Severity.Error);
+            }
+        }
+
+        loading = false;
+        Close();
+    }
+
+    public void Close()
+    {
+        model = null;
+        dialog?.Cancel();
+    }
+
+    class StuffBulkCreateModel
+    {
+        public string? BatchNames { get; set; }
+        public string? LocationId { get; set; }
+    }
+}

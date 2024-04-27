@@ -1,0 +1,85 @@
+﻿@inject IHttpService Http
+@inject IDialogService Dialog
+
+<MudDataGrid Items="Model.StuffLocations" SortMode="SortMode.None" Elevation="0">
+    <Columns>
+        <PropertyColumn Property="x => x.Location" Title="Location">
+            <CellTemplate>
+                <LocationLink Model="context.Item.Location" />
+            </CellTemplate>
+        </PropertyColumn>
+        <PropertyColumn Property="x => x.Count" />
+        <TemplateColumn Sortable="false">
+            <CellTemplate>
+                <div class="d-flex flex-nowrap">
+                    <MudIconButton OnClick="_ => OnEditClick(context.Item)" Title="Edit" Icon="@Icons.Material.Filled.Edit" Color="Color.Tertiary"></MudIconButton>
+                    <IconButtonDelete OnClick="_ => OnDeleteClick(context.Item)" />
+                </div>
+            </CellTemplate>
+        </TemplateColumn>
+    </Columns>
+    <NoRecordsContent>
+        <MudText Typo="Typo.body1">No location on record. Please add a location.</MudText>
+    </NoRecordsContent>
+    <PagerContent>
+        <div class="d-flex @PagerClass">
+            <MudSpacer />
+            <MudButton OnClick="OnAddClick" Color="Color.Primary" Variant="Variant.Filled">
+                Add Location
+            </MudButton>
+        </div>
+    </PagerContent>
+</MudDataGrid>
+
+@code
+{
+    [Parameter] 
+    public required StuffModel Model { get; set; }
+
+    [Parameter]
+    public string? PagerClass { get; set; } = "mt-3";
+
+    async void OnAddClick() 
+    {
+        var parameters = new DialogParameters();
+        parameters.Add(nameof(StuffLocationCreateModal.Stuff), Model);
+
+        var dialog = await Dialog.ShowAsync<StuffLocationCreateModal>("", parameters);
+        var result = await dialog.Result;
+
+        if (!result.Canceled && result.Data is StuffLocationModel data)
+        {
+            Model.StuffLocations.Add(data);
+            StateHasChanged();
+        }
+    }
+
+    async void OnEditClick(StuffLocationModel model)
+    {
+        var parameters = new DialogParameters();
+        parameters.Add(nameof(StuffLocationUpdateModal.Model), model);
+
+        var dialog = await Dialog.ShowAsync<StuffLocationUpdateModal>("", parameters);
+        var result = await dialog.Result;
+
+        if (!result.Canceled && result.Data is StuffLocationModel data) {
+            Model.StuffLocations.Remove(model);
+            Model.StuffLocations.Add(data);
+            StateHasChanged();
+        }
+    }
+
+    async void OnDeleteClick(StuffLocationModel model)
+    {
+        var parameters = new DialogParameters();
+        parameters.Add(nameof(StuffLocationDeleteModal.Model), model);
+
+        var dialog = await Dialog.ShowAsync<StuffLocationDeleteModal>("", parameters);
+        var result = await dialog.Result;
+
+        if (!result.Canceled) {
+            Model.StuffLocations.Remove(model);
+            StateHasChanged();
+        }
+    }
+}
